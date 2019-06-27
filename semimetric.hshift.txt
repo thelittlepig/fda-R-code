@@ -1,0 +1,37 @@
+semimetric.hshift <- function(DATA1, DATA2, grid)
+{
+###############################################################
+# Computes between curves a semimetric taking into account an 
+# horizontal shift effect.   
+#    "DATA1" matrix containing a first set of curves stored row by row
+#    "DATA2" matrix containing a second set of curves stored row by row
+#    "grid" vector which defines the grid (one can choose 1,2,...,nbgrid
+#           where nbgrid is the number of points of the discretization) 
+# Returns a "semimetric" matrix containing the semimetric computed 
+# between the curves lying to the first sample and the curves lying  
+# to the second one.
+###############################################################
+	if(is.vector(DATA1)) DATA1 <- as.matrix(t(DATA1))
+	if(is.vector(DATA2)) DATA2 <- as.matrix(t(DATA2))
+	testfordim <- sum(dim(DATA1)==dim(DATA2))==2
+	twodatasets <- T
+	if(testfordim) twodatasets <- sum(DATA1==DATA2)!=prod(dim(DATA1))
+	n1 <- nrow(DATA1)
+	if(twodatasets) n2 <- nrow(DATA2) else n2 <- n1
+	SEMIMETRIC <- matrix(0, nrow=n1, ncol=n2)
+	if(!twodatasets){
+		for(i in 1:(n1-1)){
+			for(j in (i+1):n2){
+				SEMIMETRIC[i,j] <- hshift(DATA1[i,], DATA2[j,], grid)$dist
+			}  
+		}
+		SEMIMETRIC <- SEMIMETRIC + t(SEMIMETRIC)
+	}else{
+		for(i in 1:n1){
+			for(j in 1:n2){
+				SEMIMETRIC[i,j] <- hshift(DATA1[i,], DATA2[j,], grid)$dist
+			}  
+		}
+	}
+	return(SEMIMETRIC)
+}

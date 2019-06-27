@@ -1,0 +1,19 @@
+summary.npfda <- function(object)
+################################################################
+# Display a summary of an object of class "npfda"
+################################################################
+{
+	if(object$method == "discrimination"){
+		cat(paste("k-fold misclassification rate:", object$misclas, "\n\n"))
+	}else{
+		cat(paste("k-fold relative mean squared erros:", object$rmse, "\n\n"))
+	}
+	cat("Denoising step\n")
+	cat(paste("==> smoothing parameters:", format(object$bws, scientific = TRUE), "\n\n"))
+	if(object$method == "discrimination"){
+		cat("Functional nonparametric discrimination step\n")
+	}else{
+		cat("Functional nonparametric regression step\n")
+	}
+	cat(paste("==> number of nearest neighbours", object$knn, "\n\n"))
+}

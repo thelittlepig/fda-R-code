@@ -1,0 +1,64 @@
+classif.part <- function(CURVES, PROBCURVES, SEMIMETRIC, kind.of.kernel, index, Bw.seq, Group, shi, semimetric, threshold, nss, mspg, centrality, ...)
+{
+#################################################################
+# From the set of curves contained in the matrix "CURVES", it performs
+# a partition and computes several features
+#   "CURVES" contains the curves (row by row)
+#   "PROBCURVES" contains the probability curves (row by row)
+#   "SEMIMETRIC" matrix containing the proximities between curves
+#   ... parameter needed for the used semimetric routine
+#   "kind.of.kernel" gives the kernel used for computing the modes
+#   "index" is the index correponding to the optimal bandwidth
+#           (see function "classif.bw")
+#   "Bw.seq" contains a fixed sequence of bandwidths
+#   "Group"  gives the unit numbers of the concerned class
+#   "shi" subsampling heterogeneity index of the set of curves
+#         defined by the vector "Group"
+#   "semimetric" contains the semimetric type (default="deriv")
+#   "threshold"  contains the value which gives the minimum gain
+#      accepted in terms of splitting score
+#   "nss"        gives the number of subsamples required for
+#      computing the subsampling heterogeneity index (default="50")
+#      (if "nss=0", the method uses HI instead of SHI which reduces
+#      the computational cost)
+#   "mspg"       gives the minimal size per group authorized 
+#   "centrality": character string giving the centrality feature 
+#       compared with the mode (centrality="mean" or "median") 
+#       in order to compute the heterogeneity index (default="mean")      
+# Returns a list:
+#   "$Groups" list giving the unit numbers componed each group of the 
+#             performed partition
+#   "Bw.opt"  vector containing the optimal bandwidth of each group
+#   "$Index"  vector containing the index correponding to the optimal 
+#             bandwidth
+#   "$SHI"    vector giving the SHI for each group
+#   "$Ssc"    scalar giving the splitting score of performed partition
+#####################################################################
+        res.classif.split <- classif.split(PROBCURVES, index, Group)
+        nbgroups <- length(res.classif.split)
+        res <- list(Groups=list())
+        if(nbgroups!=0){
+                minsize <- min(sapply(res.classif.split, length))
+                if(minsize>mspg){
+                        Bw.opt <- 0
+                        Index <- 0
+                        shisub <- 0
+                        for(k in 1:nbgroups){
+                              Subgroup <- res.classif.split[[k]]
+                              res.classif.bw <- classif.bw(PROBCURVES, Bw.seq, Subgroup)
+                              Bw.opt[k] <- res.classif.bw$bw
+                              Index[k] <- res.classif.bw$index
+                              if(nss==0){
+                                       shisub[k] <- classif.hi(CURVES, SEMIMETRIC, kind.of.kernel, Bw.opt[k], Subgroup, semimetric, centrality, ...)
+                              } else {
+                                       shisub[k] <- classif.shi(CURVES, SEMIMETRIC, kind.of.kernel, Bw.opt[k], Subgroup, nss, semimetric, centrality, ...)  
+                              }
+                        }
+                        split.score <- 1- sum(sapply(res.classif.split, length)*shisub)/(length(Group)*shi)
+                        if(split.score>threshold){
+                                res <- list(Groups=res.classif.split, Bw.opt=Bw.opt, Index=Index, SHI=shisub, Ssc=split.score)
+                        }
+                }
+        }
+        return(res)
+}

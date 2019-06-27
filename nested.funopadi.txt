@@ -1,0 +1,204 @@
+nested.funopadi = function(Classes, CONTAMINATED_CURVES, semimetric = "deriv", nbbwsmooth = 10, bw.adjust = F, kfold = 5, ...)
+{
+################################################################
+# Performs nonparametric functional discrimination of a sample of contaminated curves when 
+# a categorical response is observed (supervised classification). 
+# Two nested kernel estimators are implemented : one for the denoising step
+# and one for the nonparametric functional discrimination. 
+# The estimating algorithm selects automatically two smoothing parameters 
+# (one for the denoising step and one for the nonparametric functional 
+# discrimination step) by minimizing the k-fold cross-validation (the 
+# original dataset is split into "kfold" blocks or subsamples).
+# Remark: the measurements where the contaminated curves are observed must be   
+#         systematically the same (and equispaced) for the whole sample
+#    "Classes" vector containing the categorical responses
+#              giving the group number for each curve in 
+#              the matrix CONTAMINATED_CURVES (if nbclass is the number of 
+#              groups, "Classes" contains numbers 1,2,...,nbclass)
+#    "CONTAMINATED_CURVES" matrix containing the contaminated curves 
+#                          (stored row by row) used for the learning step
+#    "..." arguments needed for the call of the function computing 
+#          the semi-metric between curves
+#    "semimetric" character string allowing to choose the function 
+#                 computing the semimetric;  you can select 
+#                 "deriv" (default), "fourier", "hshift", "mplsr", 
+#                 and "pca"
+#    "nbbwsmooth" size of the bandwidths set used for selecting the optimal
+#                 for the denoising step (= 20 by default)
+#    "bw.adjust" logical value; if bw.adjust = T then the bandwidths used 
+#                in the denoising step are proportionnal to the standard deviation
+#                derived from the predictors observed at the measurement 
+#                where the kernel smoother is computed (by default bw.adjust = F)
+#    "kfold" integer giving the number of folds in the k-fold cross validation
+# Returns a list containing:
+#    "method" character string giving the mehod type (i.e. "discrimination")
+#    "args" list containing called arguments necessary to compute prediction with the "predict.npfda" function
+#    "Estimated.classnumber" vector containing estimated class membership 
+#                            for each curve of "CONTAMINATED_CURVES"
+#    "DENOISED_CURVES" matrix containing the denoised curves (stored row by row)
+#    "knn" optimal number of nearest neighbours in the regression step
+#    "Bandwidths" vector translating the optimal number of nearest neighbours in terms of 
+#                 bandwidths for each curve in the matrix "CONTAMINATED_CURVES" (regression step)
+#    "bws" optimal bandwidth used in the denoisiing step
+#    "misclas" k-fold misclassification rate
+################################################################
+	args = list(Responses = Classes, CONTAMINATED_CURVES = CONTAMINATED_CURVES, semimetric = semimetric, bw.adjust = bw.adjust, param = list(...))
+	Classes = as.vector(Classes)
+	nlearn = length(Classes)
+	### split the sample into kfold blocks ###
+	nblock = nlearn %/% kfold
+	listofblocks = list()
+	oldsample = 1:nlearn
+	for(kk in 1:(kfold - 1)){
+		listofblocks[[kk]] = sample(oldsample, nblock)
+		newsample = setdiff(oldsample, listofblocks[[kk]])
+		oldsample = newsample
+	}
+	Alreadyused = c(listofblocks, recursive = T)
+	listofblocks[[kfold]] = (1:nlearn)[- Alreadyused]
+	# set the vector Knearest contains the sequence of k-nearest neighbours 
+	# used for computing the optimal bandwidth
+	nstart = nlearn - length(listofblocks[[1]])
+	step = ceiling(nstart / 100)
+	if(step == 0) step = 1
+	Knearest = seq(from = trunc(0.05 * nstart), to = trunc(0.25 * nstart), by = step)
+	nbknearest = length(Knearest)
+	kmax = max(Knearest)
+	# Grid of measurements where the contaminated curves are observed
+	# Equispaced in [0, 1] and balanced (i.e. the same grid for all contaminated curves)
+	Grid = seq(0, 1, length = ncol(CONTAMINATED_CURVES))
+	ngrid = length(Grid)
+	#################
+	# denoising step	
+	#################
+	### set the sequence of bandwidths for denoising stage
+	bwsmooth_min = 5 * max(diff(Grid)) # smaller bandwidth = 5 times the difference between two consecutive grid points
+	bwsmooth_max = 0.5 * diff(range(Grid)) # larger bandwidth = 25% of the grid range
+	Bwsmooth = seq(from = bwsmooth_min, to = bwsmooth_max, length = nbbwsmooth)		
+	if(bw.adjust){
+		StandardDeviation = sqrt(apply(CONTAMINATED_CURVES, 2, var))
+	}else{
+		StandardDeviation = rep(1, ncol(CONTAMINATED_CURVES))		
+	}
+	Bws = Bwsmooth / mean(StandardDeviation)
+	nbbws = length(Bws)
+	# denoise the contaminated curves with the sequence of bandwidths contained in "Bws"
+	SMOOTHED_CURVES = matrix(0, nrow = nlearn * ngrid, ncol = nbbws)
+	for(bb in 1:nbbws) SMOOTHED_CURVES[, bb] = as.vector(kernel_smoother(Bws[bb], StandardDeviation, CONTAMINATED_CURVES, Grid))
+	nbfold = length(listofblocks)
+	nbclass = max(Classes)
+	ESTIMATED.LABELS = matrix(0, nrow = nlearn, ncol = nbknearest)
+	BINARY = matrix(0, nlearn, nbclass)
+	Indices.list = c(listofblocks, recursive = T)
+	for(g in 1:nbclass) BINARY[, g] = as.numeric(Classes == g)
+	KFOLDCV = matrix(0, nbbws, nbknearest)
+	sm = get(paste("semimetric.", semimetric, sep = ""))
+	###############################################################
+	# combine (plug-in) the denoising step with the regression step
+	###############################################################
+	#KFOLDCV = foreach(bb = 1:nbbws, .combine = 'cbind', .export = "sm") %dopar% {
+	KFOLDCV = matrix(0, nbknearest, nbbws)
+	for(bb in 1:nbbws){
+		CURVES = matrix(SMOOTHED_CURVES[, bb], nrow = nlearn)
+		# computing proximities between curves
+		if(semimetric == "mplsr"){
+			SEMIMETRIC1 = sm(Classes, CURVES, CURVES, ...)
+		}else{
+			if(semimetric == "L2"){
+				SEMIMETRIC1 = sm(CURVES, CURVES)
+			}else{
+				SEMIMETRIC1 = sm(CURVES, CURVES, ...)
+			}
+		}
+		# computing functional nonparametric supervised classification
+		count = 0
+		for(fold in 1:nbfold){
+			Outsample = listofblocks[[fold]]
+			Insample = (1:nlearn)[- Outsample]
+			SEMIMETRICIO = SEMIMETRIC1[Insample, Outsample]
+			BINARY.in = BINARY[Insample, ]
+			nout = length(Outsample)
+			HAT.PROB = matrix(0, nrow = nbclass, ncol = nbknearest)
+			for(i in 1:nout) {
+				Norm.diff = SEMIMETRICIO[, i]
+				# "norm.order" gives the sequence k_1, k_2,... such that
+				# dq(X_{k_1},X_i) < dq(X_{k_2},X_i) < ...
+				Norm.order = order(Norm.diff)
+				# "zz" contains dq(X_{k_2},X_i), dq(X_{k_3},X_i),..., 
+				# dq(X_{j_{kamx+2}},X_i)
+				zz = Norm.diff[Norm.order][2:(kmax + 2)]
+				# Bandwidth[l-1] contains (dq(X_{j_l},X_i) + 
+				# dq(X_{j_l},X_i))/2 for l=2,...,kmax+2
+				z = zz[ - (kmax + 1)]
+				Bandwidth = 0.5 * (zz[-1] + z)
+				ZMAT = matrix(rep(z, kmax), nrow = kmax, byrow = T)
+				UMAT = ZMAT/Bandwidth
+				KMAT = 1 - UMAT^2
+				KMAT[UMAT > 1] = 0
+				KMAT[col(KMAT) > row(KMAT)] = 0
+				Ind.curves = Norm.order[2:(kmax + 1)]
+				for(g in 1:nbclass) {
+					Ind.resp = BINARY.in[Ind.curves, g]
+					YMAT = matrix(rep(Ind.resp, kmax), nrow = kmax, byrow = T)
+					HAT.PROB[g,  ] = .rowSums(YMAT[Knearest,  ] * KMAT[Knearest,  ], nbknearest, kmax)
+				}
+				Kmatsumbyrow = .rowSums(KMAT[Knearest,  ], nbknearest, kmax)
+				HAT.PROB = HAT.PROB / matrix(Kmatsumbyrow, nbclass, nbknearest, byrow = T)
+				count =  count + 1
+				ESTIMATED.LABELS[count, ] = max.col(t(HAT.PROB))
+			}
+		}
+		# k-fold criterion
+		KFOLDCV[, bb] = .colSums(ESTIMATED.LABELS != Classes[Indices.list], nlearn, nbknearest) / nlearn
+	}
+	### computing optimal parameters and corresponding k-fold CV
+	Position = which(KFOLDCV == min(KFOLDCV), arr.ind = TRUE)
+	if(nrow(Position) == 1){
+		pos_knearest = Position[1, 1]
+		pos_bws = Position[1, 2]
+	}else{
+		pos_knearest = Position[2, 1]
+		pos_bws = Position[2, 2]
+	}
+	knearest_opt = Knearest[pos_knearest]
+	bws_opt = Bws[pos_bws]	
+	###  Estimating labels with data driven parameters
+	# denoising contaminated curves with optimal smoothing parameter
+    CURVES = kernel_smoother(bws_opt, StandardDeviation, CONTAMINATED_CURVES, Grid)
+	# computing proximities between denoised contaminated curves
+	if(semimetric == "mplsr"){
+		SEMIMETRIC1 = sm(Classes, CURVES, CURVES, ...)
+	}else{
+		if(semimetric == "L2"){
+			SEMIMETRIC1 = sm(CURVES, CURVES)
+		}else{
+			SEMIMETRIC1 = sm(CURVES, CURVES, ...)
+		}
+	}
+	# translate k-nearest neighbours in terms of continuous bandwidth for each 
+	# curve in the learning sample
+	Bandwidth.opt = 0
+	for(i in 1:nlearn) {
+	    Sm1i = SEMIMETRIC1[, i]
+		Bandwidth.opt[i] = sum(sort(Sm1i)[knearest_opt:(knearest_opt + 1)]) * 0.5
+	}
+	# Estimation of labels
+	ARGUMENT = t(t(SEMIMETRIC1) / Bandwidth.opt)
+	KERNEL = 1 - ARGUMENT^2
+	KERNEL[ARGUMENT > 1] = 0
+	diag(KERNEL) = 0
+	Denom = .colSums(KERNEL, nlearn, nlearn)
+	ESTIMATED.PROB = matrix(0, nrow = nlearn, ncol = nbclass)
+	for(g in 1:nbclass) {
+		PROBKERNEL = KERNEL * BINARY[, g]
+		ESTIMATED.PROB[, g] = .colSums(PROBKERNEL, nlearn, nlearn) / Denom
+	}
+	Estimated.labels = max.col(ESTIMATED.PROB)
+	# k-fold misclassification rate
+	misclas.kfoldcv = sum(Estimated.labels != Classes) / nlearn
+	# outputs
+	outputs = list(method = "discrimination", args = args, Estimated.classnumber = Estimated.labels, DENOISED_CURVES = CURVES,
+		knn = knearest_opt, Bandwidths = Bandwidth.opt, bws = Bwsmooth[pos_bws], misclas = misclas.kfoldcv)
+	class(outputs) = "npfda"
+	return(outputs)
+}

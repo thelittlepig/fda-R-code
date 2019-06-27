@@ -1,0 +1,16 @@
+rank.minima <- function(f)
+{
+######################################
+# Returns the rank of the local 
+# minima of the numeric strictly 
+# positive discretized function "f":
+# "Indmin" contains the ranks
+# ("f[Indmin]" gives the local minima)
+######################################
+        df <- diff(f)
+        df[df>=0] <- 0
+        df[df<0] <- 1
+        ddf <- diff(df)
+        Indmin <- (1:length(df))[ddf==-1]+1
+        return(Indmin)
+}

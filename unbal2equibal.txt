@@ -1,0 +1,36 @@
+unbal2equibal <- function(DATA, INSTANTS, Range.grid, lnewgrid)
+{
+###############################################################
+# Transforms an unbalanced functional dataset into an equally
+# spaced balanced via linear interpolation.
+#    "DATA" matrix containing a set of unbalanced curves 
+#            stored row by row
+#    "INSTANTS" matrix containing the set of design points 
+#               stored row by row; INSTANTS[i,j]=t_{i,j} 
+#               (J_{max}=max_i J_i). As soon as J_i<J_{max}, 
+#               the ith row of INSTANTS is completed with NA's.
+#    "Range.grid" vector of length 2 containing the range of 
+#                 the desired grid (Range.grid[1]=t_1 and 
+#                 Range.grid[2]=t_J).
+#    "lnewgrid" length of the desired equally spaced grid 
+#               t_1,t_2,...,t_J.
+# Returns a matrix containing the new balanced curves stored 
+# row by row. 
+###############################################################
+	xmin <- Range.grid[1]
+	xmax <- Range.grid[2]
+	n <- nrow(DATA)
+	NEWDATA <- matrix(0, n, lnewgrid)
+	Newgrid <- seq(xmin, xmax, length = lnewgrid)
+	for(i in 1:n) {
+		Instantsi <- INSTANTS[i,  ]
+		Instantsi <- Instantsi[!is.na(Instantsi)]
+		Datai <- DATA[i,  ]
+		Datai <- Datai[!is.na(Datai)]
+		NEWDATA[i,  ] <- approx(Instantsi, Datai, xout = Newgrid, rule
+			 = 2, f = 0)$y
+	}
+	return(list(NEWDATA = NEWDATA, Newgrid = Newgrid))
+}
+
+

@@ -1,0 +1,69 @@
+predict.npfda <- function(object, NEW_CONTAMINATED_CURVES)
+##########################################################################################
+# Compute predictions for an object of class "npfda" when providing new contaminted curves
+##########################################################################################
+#    "NEW_CONTAMINATED_CURVES" matrix containing new contaminated curves (stored row by row) 
+#                              used for predicting corresponding scalar responses
+# Returns a vector containing the predicted values
+##########################################################################################
+{
+	npred = nrow(NEW_CONTAMINATED_CURVES)
+	p = ncol(NEW_CONTAMINATED_CURVES)
+	sm = get(paste("semimetric.", object$args$semimetric, sep = ""))
+	param = object$args$param
+	nlearn = nrow(object$args$CONTAMINATED_CURVES)
+	knn = object$knn
+	# Grid of measurements where the new contaminated curves are observed
+	# ==> equispaced in [0, 1] and balanced (i.e. the same grid for all contaminated curves)
+	Grid = seq(0, 1, length = p)
+	ngrid = length(Grid)
+	# store optimal smoothing parameter for the denoising step
+	if(object$args$bw.adjust){
+		StandardDeviation = sqrt(apply(NEW_CONTAMINATED_CURVES, 2, var))
+	}else{
+		StandardDeviation = rep(1, p)		
+	}
+	bws = object$bws / mean(StandardDeviation)
+	# denoising contaminated curves (in the learning sample) with optimal smoothing parameter
+    SMOOTHED_CURVES = kernel_smoother(bws, StandardDeviation, object$args$CONTAMINATED_CURVES, Grid)
+	# denoising new contaminated curves with optimal smoothing parameter
+    SMOOTHED_NEW_CURVES = kernel_smoother(bws, StandardDeviation, NEW_CONTAMINATED_CURVES, Grid)
+	# computing proximities between curves
+	if(object$args$semimetric == "L2"){
+		SEMIMETRIC = sm(SMOOTHED_CURVES, SMOOTHED_NEW_CURVES)
+	}else{
+		if(length(param) == 3){
+			SEMIMETRIC = sm(SMOOTHED_CURVES, SMOOTHED_NEW_CURVES, param[[1]], param[[2]], param[[3]])
+		}else{
+			SEMIMETRIC = sm(SMOOTHED_CURVES, SMOOTHED_NEW_CURVES, param[[1]])	
+		}
+	}
+	# translate k-nearest neighbours in terms of continuous bandwidth for each new contaminated curve
+	Bw.knn = 0
+	for(k in 1:npred) {
+        Sm2k = SEMIMETRIC[, k]
+        Bw.knn[k] = sum(sort(Sm2k)[knn:(knn + 1)]) * 0.5
+	}
+	# Compute predictions
+	ARGUMENT = t(t(SEMIMETRIC) / Bw.knn)
+	KERNEL = 1 - ARGUMENT^2
+	KERNEL[ARGUMENT > 1] = 0
+	Denom = .colSums(KERNEL, nlearn, npred)
+	if(object$method == "discrimination"){
+		# Predicted labels
+		nbclass = max(object$args$Responses)
+		BINARY = matrix(0, nlearn, nbclass)
+		for(g in 1:nbclass) BINARY[, g] = as.numeric(object$args$Responses == g)
+		PREDICTED.PROB = matrix(0, nrow = npred, ncol = nbclass)
+		for(g in 1:nbclass) {
+			PROBKERNEL = KERNEL * BINARY[, g]
+			PREDICTED.PROB[, g] = .colSums(PROBKERNEL, nlearn, npred) / Denom
+		}
+		Predictions = max.col(PREDICTED.PROB)	
+	}else{
+		# Predicted responses
+		Predictions = .colSums(KERNEL * res$args$Responses, nlearn, npred) / Denom		
+	}
+	# outputs
+	return(Predictions)
+}

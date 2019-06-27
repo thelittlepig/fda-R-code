@@ -1,0 +1,76 @@
+semimetric.fourier <- function(DATA1, DATA2, nderiv, nbasis, Range.grid, period=NULL)
+{
+###############################################################
+# Computes a semimetric between curves based on their Fourier expansion.
+#    "DATA1" matrix containing a first set of curves stored row by row
+#    "DATA2" matrix containing a second set of curves stored row by row
+#    "nderiv" order of derivation
+#    "nbasis" size of the basis
+#    "Range.grid" vector of length 2 containing the range of the grid at 
+#                 which the curve are evaluated (i.e. range of the 
+#                 discretization)
+#    "period" allows to select the period for the fourier expansion
+# Returns a "semimetric" matrix containing the semimetric computed 
+# between the curves lying to the first sample and the curves lying  
+# to the second one.
+###############################################################
+	if(is.vector(DATA1)) DATA1 <- as.matrix(t(DATA1))
+	p <- ncol(DATA1)
+	nbasismax <- (p - nbasis)%/%2
+	if(nbasis > nbasismax){
+		stop(paste("give a number nbasis smaller than ",nbasismax, " for avoiding ill-conditioned matrix"))
+	}
+	if(is.vector(DATA2)) DATA2 <- as.matrix(t(DATA2))
+	testfordim <- sum(dim(DATA1)==dim(DATA2))==2
+	twodatasets <- T
+	if(testfordim) twodatasets <- sum(DATA1==DATA2)!=prod(dim(DATA1))
+	a <- Range.grid[1]
+	b <- Range.grid[2]
+	Eval <- seq(a, b, length = p)
+#####################################################################
+# Fourier approximation of the curves containing in DATA1 :
+# -----------------------------------------------------------
+# "fourier" allows to define the Fourier basis
+# "COEF1[, i]" corresponds to the Fourier expansion
+# of the discretized curve contained in DATA1[i, ]. 
+# The Fourier approximation of the curve contained in "DATA1[i, ]" 
+# is given by "FOURIER %*% COEF1[, i]"
+#####################################################################
+        if(is.null(period)) period <- b - a
+	FOURIER <- fourier(Eval, nbasis, period)
+	CMAT <- crossprod(FOURIER)
+	DMAT1 <- crossprod(FOURIER, t(DATA1))
+	COEF1 <- symsolve(CMAT, DMAT1)
+#######################################################################
+# Numerical integration by the Gauss method :
+# -------------------------------------------
+# The objects ending by "gauss" allow us to compute numerically  
+# integrals by means the "Gauss method" (Leval.gauss=6 ==> the computation 
+# of the integral is exact for polynom of degree less or equal to 11).
+#######################################################################
+	Point.gauss <- c(-0.9324695142, -0.6612093865, -0.2386191861, 
+		0.2386191861, 0.6612093865, 0.9324695142)
+	Weight.gauss <- c(0.1713244924, 0.360761573, 0.4679139346, 0.4679139346,
+		0.360761573, 0.1713244924)
+	Eval.gauss <- 0.5 * (b - a) * (1 + Point.gauss)
+	Leval.gauss <- length(Eval.gauss)
+	FOURIER.DERIV <- fourier(Eval.gauss, nbasis, period, nderiv)
+	H <- t(FOURIER.DERIV) %*% (FOURIER.DERIV * (Weight.gauss * 0.5 * (b - a
+		)))
+	eigH <- eigen(H, sym = T)
+	eigH$values[eigH$values < 0] <- 0
+	HALF <- t(eigH$vectors %*% (t(eigH$vectors) * sqrt(eigH$values)))
+	COEF1 <- t(HALF %*% COEF1)
+	if(twodatasets) {
+		DMAT2 <- crossprod(FOURIER, t(DATA2))
+		COEF2 <- symsolve(CMAT, DMAT2)
+		COEF2 <- t(HALF %*% COEF2)
+	}
+	else {
+		COEF2 <- COEF1
+	}
+	SEMIMETRIC <- 0
+	for(f in 1:nbasis)
+		SEMIMETRIC <- SEMIMETRIC + outer(COEF1[, f], COEF2[, f], "-")^2
+	return(sqrt(SEMIMETRIC))
+}

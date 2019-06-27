@@ -1,0 +1,17 @@
+entropy <- function(f, x)
+{
+##############################################################
+# Returns the entropy of the strictly positive function "f" 
+# known at points "x":
+# "f" is a numeric vector contained the values of the function
+# "x" is a numeric vector contained the values at which the 
+#     function is valued
+##############################################################
+        Diffx <- diff(x)
+        f <- abs(f)
+        flogf <- rep(0, length(f))
+        logic <- (f!=0)
+        flogf[logic] <- f[logic] * log(f[logic])
+        n <- length(f)
+        return(sum((flogf[-1] + flogf[ - n]) * Diffx)/2)
+}

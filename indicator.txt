@@ -1,0 +1,10 @@
+indicator <- function(u)
+{
+        Logic0 <- u<0
+	Logic1 <- u>1
+        Logic01 <- as.logical((1-Logic0) * (1-Logic1))
+        u[Logic0] <- 0
+        u[Logic1] <- 0
+        u[Logic01] <- 1
+	return(u)
+}

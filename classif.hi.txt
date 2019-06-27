@@ -1,0 +1,30 @@
+classif.hi <- function(CURVES, SEMIMETRIC, kind.of.kernel, bw, Group, semimetric, centrality,...)
+{
+#####################################################################
+# Returns the "Heterogeneity Index (HI)" of the class
+# defined by the vector "Group" of the curves dataset "CURVES":
+#   "CURVES" matrix containing the curves dataset (row by row)
+#   "SEMIMETRIC" matrix containing the proximities between curves
+#   "bw"     is a selected bandwidth (see function "classif.bw")
+#   "Group"  gives the unit numbers of the concerned class
+#   "semimetric" gives the semimetric type required
+#            (see functions "semimetric.deriv", "semimetric.pca",...)
+#   "centrality": character string giving the centrality feature 
+#            compared with the mode (centrality="mean" or "median").
+#   "..."    arguments for defining the used semimetric
+#            computing HI
+# Returns the value of HI for the class defined by "Group"
+#####################################################################
+        lg <- length(Group)
+        p <- ncol(CURVES)
+        rank.mode <- funopa.mode(bw, SEMIMETRIC[Group, Group],kind.of.kernel)
+        Modal.curve <- CURVES[Group[rank.mode],]
+        if(centrality=="mean")
+	        Centrality.feature <- apply(CURVES[Group, ], 2, sum)/lg
+        if(centrality=="median")
+                Centrality.feature <- median.npfda(SEMIMETRIC[Group, Group])
+        MM0 <- rbind(Modal.curve, Centrality.feature, rep(0, p))
+        sm <- get(paste("semimetric.", semimetric, sep = ""))
+        SM.MM0 <- sm(MM0, MM0, ...)
+        return(SM.MM0[1,2]/(SM.MM0[1,3]+SM.MM0[2,3]))
+}

@@ -1,0 +1,5 @@
+median.npfda <- function(SEMIMETRIC)
+{
+	Sum.of.distance <- apply(SEMIMETRIC, 1, sum)
+	return(order(Sum.of.distance)[1])
+}

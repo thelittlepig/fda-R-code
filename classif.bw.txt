@@ -1,0 +1,30 @@
+classif.bw <- function(PROBCURVES, Bw.seq, Group)
+{
+###############################################################
+# Computes a bandwidth among a fixed sequence Bw.seq 
+# from probability curves contained in the matrix 
+# "PROBCURVES" which minimizes the entropy:
+#   "PROBCURVES" contains the probability curves (row by row)
+#   "Bw.seq"     contains a fixed sequence of bandwidths
+#   "Group"      gives the unit numbers of the concerned group
+# Returns a list containing:
+#   "$index" is the index correponding to the optimal bandwidth
+#   "$bw"    is the optimal bandwidth 
+###############################################################
+        number.of.bw <- length(Bw.seq)
+        entro <- 0
+	options(warn=-1)
+        for(j in 1:number.of.bw){
+                prob.points <- PROBCURVES[Group,j]
+                pp.start <- min(prob.points)
+                pp.end <- max(prob.points)
+                if(pp.start<pp.end){
+                        est <- density(prob.points, bw="bcv",from=pp.start, to=pp.end)
+                        entro[j] <- entropy(est$y, est$x)
+                } else {
+                        entro[j] <- 0
+                }
+        }
+        index <- order(entro[entro>0])[1]+sum(entro==0)
+        return(list(index=index, bw=Bw.seq[index]))
+}

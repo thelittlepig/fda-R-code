@@ -1,0 +1,45 @@
+semimetric.mplsr <- function(Classes1, DATA1, DATA2, q)
+{
+###############################################################
+# Computes between curves a semimetric based on the partial least 
+# squares method.
+#    "Classe1" vector containing a categorical response which 
+#              corresponds to class number for units stored in DATA1
+#    "DATA1" matrix containing a first set of curves stored row by row
+#    "DATA2" matrix containing a second set of curves stored row by row
+#    "q" the retained number of factors
+# Returns a "semimetric" matrix containing the semimetric computed 
+# between the curves lying to the first sample and the curves lying  
+# to the second one.
+###############################################################
+	if(is.vector(DATA1)) DATA1 <- as.matrix(t(DATA1))
+	if(is.vector(DATA2)) DATA2 <- as.matrix(t(DATA2))
+	testfordim <- sum(dim(DATA1)==dim(DATA2))==2
+	twodatasets <- T
+	if(testfordim) twodatasets <- sum(DATA1==DATA2)!=prod(dim(DATA1))
+	qmax <- ncol(DATA1)
+	if(q > qmax) stop(paste("give a integer q smaller than ", qmax))
+	n1 <- nrow(DATA1)
+	nbclass <- max(Classes1)
+	BINARY1 <- matrix(0, nrow = n1, ncol = nbclass)
+	for(g in 1:nbclass) {
+		BINARY1[, g] <- as.numeric(Classes1 == g)
+	}
+	mplsr.res <- mplsr(DATA1, BINARY1, q)
+	COMPONENT1 <- DATA1 %*% mplsr.res$COEF
+	COMPONENT1 <- outer(rep(1, n1), as.vector(mplsr.res$b0)) + COMPONENT1
+	if(twodatasets) {
+		n2 <- nrow(DATA2)
+		COMPONENT2 <- DATA2 %*% mplsr.res$COEF
+		COMPONENT2 <- outer(rep(1, n2), as.vector(mplsr.res$b0)) + 
+			COMPONENT2
+	}
+	else {
+		COMPONENT2 <- COMPONENT1
+	}
+	SEMIMETRIC <- 0
+	for(g in 1:nbclass)
+		SEMIMETRIC <- SEMIMETRIC + outer(COMPONENT1[, g], COMPONENT2[, 
+			g], "-")^2
+	return(sqrt(SEMIMETRIC))
+}

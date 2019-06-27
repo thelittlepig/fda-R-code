@@ -1,0 +1,24 @@
+kernel_smoother = function(bwsmooth, Std, CONTAMINATED_CURVES, Grid)
+{
+	################################################################
+	# Performs the denoising step on the contaminated profiles. A local 
+	# bandwidth (proportional to the standard deviation derived from 
+	# the measurement point where the smoother is valued) is used.   
+	################################################################
+	#    "bwsmooth" given bandwidth
+	#    "Std" vector containing standard deviations computed at the sampled points
+	#    "CONTAMINATED_CURVES" matrix containing the contamined functional predictors (row by row)
+	#    "Grid" vector of measurement points (the same for all curves)
+	# 
+	# Returns the relative k-fold cross-validation
+	################################################################
+	GRID = outer(Grid, Grid, "-")
+	ARGUMENT = GRID / (bwsmooth * Std)
+	KERNEL = 1 - (ARGUMENT)^2
+	KERNEL[ARGUMENT < -1] = 0
+	KERNEL[ARGUMENT > 1] = 0
+	Denominator = apply(KERNEL, 1, sum)
+	WEIGHTS = KERNEL / Denominator
+	OUTPUTS = CONTAMINATED_CURVES %*% WEIGHTS
+	return(OUTPUTS)
+}

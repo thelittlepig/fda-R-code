@@ -1,0 +1,29 @@
+#####################################################################
+approx.spline <- function(DATA, order, nknot, Range.grid)
+{
+#####################################################################
+# B-spline approximation of the curves containing in DATA :
+# -----------------------------------------------------------
+# "order" and "nknot" allow to define the B-spline basis
+# "COEF[, i]" corresponds to the B-spline expansion
+# of the discretized curve contained in DATA[i, ]. 
+# The B-spline approximation of the curve contained in "DATA[i, ]" 
+# is given by "APPROX[, i]"
+#####################################################################
+	library(splines)
+	nknotmax <- (p - order - 1)%/%2
+	if(nknot > nknotmax){
+		stop(paste("give a number nknot smaller than ",nknotmax, " for avoiding ill-conditioned matrix"))
+	}
+	p <- ncol(DATA)
+	a <- Range.grid[1]
+	b <- Range.grid[2]
+	Knot <- seq(a, b, length = nknot + 2)[ - c(1, nknot + 2)]
+	x <- seq(a, b, length = p)
+	Delta <- sort(c(rep(c(a, b), order), Knot))
+	BSPLINE <- splineDesign(Delta, x, order)
+	CMAT <- crossprod(BSPLINE)
+	DMAT <- crossprod(BSPLINE, t(DATA))
+	COEF <- symsolve(CMAT, DMAT)
+	list(COEF = COEF, APPROX = BSPLINE %*% COEF)
+}

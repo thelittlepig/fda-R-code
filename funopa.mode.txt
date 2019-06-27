@@ -1,0 +1,21 @@
+funopa.mode <- function(band, SEMIMETRIC, kind.of.kernel = "quadratic")
+{
+#######################################################
+# Returns the rank of the modal curve in the curves 
+# sample used for computing the matrix "SEMIMETRIC":
+# "band" is the bandwidth used for estimating 
+#             the distribution of the curves sample
+# "SEMIMETRIC[i,j]" contains "d(Xi,Xj)" where "d(.,.)"
+#             is a fixed semimetric, Xi (resp. Xj) the 
+#             ith (resp. jth) curve of the curves sample
+########################################################
+	kernel <- get(kind.of.kernel)
+        n <- nrow(SEMIMETRIC)
+        diag(SEMIMETRIC) <- 0
+        KERNEL <- kernel(SEMIMETRIC/band)
+        KERNEL[KERNEL < 0] <- 0
+        diag(KERNEL) <- 0
+        density.estimate <- apply(KERNEL, 1, sum)/n
+        rank.mode <- order(density.estimate)[n]
+        return(rank.mode)
+}

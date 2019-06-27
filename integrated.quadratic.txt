@@ -1,0 +1,13 @@
+integrated.quadratic <- function(u)
+{
+#  integrated quadratic kernel
+        result <- u
+        Logic0 <- (u <= -1)
+        Logic1 <- (u >= 1)
+        Logic2 <- (u > -1 & u < 1)
+        result[Logic0] <- 0
+        result[Logic1] <- 1
+	Uval <- result[Logic2]
+        result[Logic2] <- 0.75 * Uval * (1 - (Uval^2)/3) + 0.5
+        return(result)
+}

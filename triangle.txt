@@ -1,0 +1,5 @@
+triangle <- function(u)
+{
+#  triangle kernel
+        1 - u
+}

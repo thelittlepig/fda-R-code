@@ -1,0 +1,40 @@
+hshift <- function(x,y, grid)
+{
+####################################################################
+# Returns the "horizontal shifted proximity" between two discretized 
+# curves "x" and "y" (vectors of same length). 
+# The user has to choose a "grid".
+#####################################################################
+        lgrid <- length(grid)
+	a <- grid[1]
+	b <- grid[lgrid]
+	rang <- b - a
+        lagmax <- floor(0.2 * rang)
+	integrand <- (x-y)^2
+	Dist1 <- sum(integrand[-1] + integrand[-lgrid])/(2 * rang)
+	Dist2 <- Dist1
+	for(i in 1:lagmax){
+	        xlag <- x[-(1:i)]
+		xforward <- x[-((lgrid-i+1):lgrid)]
+	        ylag <- y[-(1:i)]
+		yforward <- y[-((lgrid-i+1):lgrid)]
+		integrand1 <- (xlag-yforward)^2
+		integrand2 <- (xforward-ylag)^2
+		lintegrand <- length(integrand1)
+		rescaled.range <- 2 * (rang - 2 * i)
+		Dist1[i+1] <- sum(integrand1[-1] + integrand1[-lintegrand])/rescaled.range
+		Dist2[i+1] <- sum(integrand2[-1] + integrand2[-lintegrand])/rescaled.range
+        }
+	lag1 <- (0:lagmax)[order(Dist1)[1]]
+	lag2 <- (0:lagmax)[order(Dist2)[1]]
+	distmin1 <- min(Dist1)
+	distmin2 <- min(Dist2)
+	if(distmin1 < distmin2){
+		distmin <- distmin1
+		lagopt <- lag1
+	}else{
+		distmin <- distmin2
+		lagopt <- lag2		
+	}
+	return(list(dist=sqrt(distmin),lag=lagopt))
+}

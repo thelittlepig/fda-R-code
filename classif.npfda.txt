@@ -1,0 +1,142 @@
+classif.npfda <- function(CURVES, ..., kind.of.kernel="quadratic", semimetric="deriv", threshold=0.1, nb.bw=100, nss=0, mspg=10, centrality="mean")
+{
+#################################################################
+# Performs the unsupervised classification procedure:
+# "CURVES" contains the curves (row by row)
+# ... parameter needed for the used semimetric routine
+# "kind.of.kernel" gives the kernel used for computing the modes
+# "semimetric" contains the semimetric type (default="deriv")
+# "threshold"  contains the value which gives the minimum gain
+#    accepted in terms of splitting score
+# "nb.bw"      gives the number of bandwidths for building the
+#    corresponding sequence (default="100")
+# "nss"        gives the number of subsamples required for
+#    computing the subsampling heterogeneity index (default="50")
+#    (if "nss=0", the method uses HI instead of SHI which reduces
+#    the computational cost)
+# "mspg"       gives the minimal size per group authorized 
+# "centrality": character string giving the centrality feature 
+#     compared with the mode (centrality="mean" or "median") 
+#     in order to compute the heterogeneity index (default="mean")      
+# Returns a list:
+#  MEANS     matrix containing the mean curve of each group
+#  MEDIANS   matrix containing the median curve of each group
+#  MODES     matrix containing the modal curve of each group
+#  Bw.opt    vector containing the optimal bandwidth of each group
+#  Partition list giving the unit numbers componed each group
+#  Labels    character vector giving the classification tree
+#  Ssc       vector giving the splitting score of each accepted split 
+#####################################################################
+        n <- nrow(CURVES)
+##
+# Computes the proximity between curves according to the selected semimetric
+############################################################################
+        sm <- get(paste("semimetric.", semimetric, sep = ""))
+        SEMIMETRIC <- sm(CURVES, CURVES, ...)
+##
+# Build the sequence of bandwidths
+##################################
+        Hrange <- range(SEMIMETRIC)
+        Bw.seq <- seq(Hrange[1], Hrange[2] * 0.5, length = nb.bw + 1)[-1]
+##
+# Probability curves of spectrometric data
+##########################################
+        PROBCURVES <- matrix(0, n, nb.bw)
+        for(i in 1:n){
+       	        PROBCURVES[i,] <- prob.curve(i, SEMIMETRIC, Bw.seq)
+        }
+##
+# Selecting the optimal bandwidth of full sample
+################################################
+        res.classif.bw <- classif.bw(PROBCURVES, Bw.seq, 1:n)
+        Bw.opt <- res.classif.bw$bw
+        index <- res.classif.bw$index
+##
+# Computing SHI/HI of full sample
+#################################
+        if(nss==0){
+                shi <- classif.hi(CURVES, SEMIMETRIC, kind.of.kernel, Bw.opt, 1:n, semimetric, centrality, ...)
+        } else {
+                shi <- classif.shi(CURVES, SEMIMETRIC, kind.of.kernel, Bw.opt, 1:n, nss, semimetric, centrality, ...)
+        }
+##
+# Partitioning of full sample
+#############################
+        current.part <- classif.part(CURVES, PROBCURVES, SEMIMETRIC, kind.of.kernel, index, Bw.seq, 1:n, shi, semimetric, threshold, nss, mspg, centrality, ...)
+        current.partition <- list()
+        current.partition[[1]] <- current.part
+        current.part <- current.partition
+        nbpart <- length(current.part)
+        final.partition <- list()
+        nbgroups <- length(current.part[[nbpart]]$Groups)
+##
+# Recursive partitioning procedure
+##################################
+        if(nbgroups>0){
+                Gains <- numeric(0)
+                count1 <- 0
+                Names <- list("")
+                Names.new <- list("")
+                Labels <- character(0)
+                while(nbpart!=0){
+                        count3 <- 0
+                        test <- F
+	                for(l in 1:nbpart){
+                                count2 <- 0
+                                new.partition <- list()
+                                nbgroups <- length(current.part[[l]]$Groups)
+                                if(nbgroups>0){
+                                        Logic3 <- F
+                                        for(k in 1:nbgroups){
+                                                label <- paste(Names[[l]],k,sep="")
+                                                index <- current.part[[l]]$Index[k]
+                                                Group <- current.part[[l]]$Groups[[k]]
+                                                shi <- current.part[[l]]$SHI[k]
+	                                        new.partition[[k]] <- classif.part(CURVES, PROBCURVES, SEMIMETRIC, kind.of.kernel, index, Bw.seq, Group, shi, semimetric, threshold, nss, mspg, centrality, ...)
+                                                logic1 <- (length(new.partition[[k]]$Groups)==0)
+                                                if(!logic1){ logic2 <- (new.partition[[k]]$Ssc<threshold)
+                                                } else {logic2 <- FALSE}
+                                                if(logic1 || logic2){
+                                                    count1 <- count1 + 1
+                                                    Labels[count1] <- label
+                                                    final.partition[[count1]] <- current.part[[l]]$Groups[[k]]
+                                                    Bw.opt[count1] <- current.part[[l]]$Bw.opt[k]
+                                                } else {
+                                                    test <- T
+                                                    count2 <- count2 + 1
+                                                    Names.new[[l]][count2] <- label
+                                                    count3 <- count3 + 1
+                                                    current.partition[[count3]] <- new.partition[[k]]
+                                                }
+                                        }
+                                        Gains <- c(Gains, current.part[[l]]$Ssc)
+                                        if(test){Names <- as.list(Names.new[[l]])}
+                                } else {
+                                        count1 <- count1 + 1
+                                        final.partition[[count1]] <- current.part[[l]]$Groups
+                                }
+                        }
+                        if(test){
+                                current.part <- current.partition
+                                nbpart <- length(current.part)
+                        } else {
+                                nbpart <- 0
+                        }
+                }
+                nb.modes <- length(final.partition)
+                MODES <- matrix(0,nb.modes,ncol(CURVES))
+                MEDIANS <- matrix(0,nb.modes,ncol(CURVES))
+                MEANS <- matrix(0,nb.modes,ncol(CURVES))
+                for(j in 1:nb.modes){
+                        Group <- final.partition[[j]]
+                        rank.mode <- funopa.mode(Bw.opt[j], SEMIMETRIC[Group, Group], kind.of.kernel)
+                        rank.median <- median.npfda(SEMIMETRIC[Group, Group])
+                        MODES[j,] <- CURVES[Group[rank.mode],]
+                        MEDIANS[j,] <- CURVES[Group[rank.median],]
+                        MEANS[j,] <- apply(CURVES[Group,], 2, sum)/length(Group)
+                }
+                return(list(MEANS=MEANS, MEDIANS=MEDIANS, MODES=MODES, Bw.opt=Bw.opt, Partition=final.partition, Labels=Labels, Ssc=Gains))
+        } else { 
+              cat("Classification procedure don't split the initial sample according to the selected criterion")
+        }
+}

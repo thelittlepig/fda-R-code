@@ -1,0 +1,36 @@
+classif.split <- function(PROBCURVES, index, Group)
+{
+#################################################################
+# Returns a partition of "Group"
+#   "PROBCURVES" contains the probability curves (row by row)
+#   "index" is the index correponding to the optimal bandwidth
+#           (see function "classif.bw")
+#   "Group" gives the unit numbers of the concerned group
+# Returns a list allowing of building the partition:
+#   if the density function of the probability points admits at 
+#   least one local minimum, then it is possible to split "Group" 
+#   into subgroups contained in the returned list.
+#################################################################
+        Prob.points <- PROBCURVES[Group, index]
+        pp.start <- min(Prob.points)
+        pp.end <- max(Prob.points)
+        subgroup <- list()
+        if(pp.end > pp.start){
+                est <- density(Prob.points, bw="bcv", from=pp.start, to=pp.end)
+                Prob.lim <- est$x[rank.minima(est$y)]
+	        if(length(Prob.lim)==0){ 
+                         warning("Zero local minimum ==> this group is a terminal leaf of the classification tree")
+                } else {
+                        kmax <- length(Prob.lim)
+                        subgroup[[1]] <- Group[Prob.points>Prob.lim[kmax]]
+                        subgroup[[kmax+1]] <- Group[Prob.points<= Prob.lim[1]]
+                        if(kmax>1){
+                                for(k in 1:(kmax-1))
+                                         subgroup[[k+1]] <- Group[(Prob.points>Prob.lim[k]) & (Prob.points<=Prob.lim[k+1])]
+                        }
+                }
+        } else {
+                warning("Zero local minimum ==> this group is a terminal leaf of the classification tree")
+        }
+        return(subgroup)
+}

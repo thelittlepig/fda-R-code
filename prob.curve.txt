@@ -1,0 +1,15 @@
+prob.curve <- function(i, SEMIMETRIC, Hseq)
+{
+############################################################
+# Returns the probability curve for 
+# the ith unit :
+# "i" is an integer between 1 and size of the sample curves
+# "SEMIMETRIC" is the semimetric matrix of the sample curves
+# "Hseq" contains the sequence of the bandwidths "h"
+############################################################
+        Prox <- sort(SEMIMETRIC[i,  - i])
+        Sbph <- 0
+        for(k in 1:length(Hseq))
+                Sbph[k] <- length(Prox[Prox < Hseq[k]])
+        return(Sbph/ncol(SEMIMETRIC))
+}

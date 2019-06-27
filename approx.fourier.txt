@@ -1,0 +1,26 @@
+approx.fourier <- function(DATA, nbasis, Range.grid, period=NULL)
+{
+#####################################################################
+# Fourier approximation of the curves containing in DATA :
+# -----------------------------------------------------------
+# "nbasis" and "period" allow to define the Fourier basis
+# "COEF[, i]" corresponds to the Fourier expansion
+# of the discretized curve contained in DATA[i, ]. 
+# The Fourier approximation of the curve contained in "DATA[i, ]" 
+# is given by "FOURIER %*% COEF[, i]"
+#####################################################################
+	p <- ncol(DATA)
+	nbasismax <- (p - nbasis)%/%2
+	if(nbasis > nbasismax){
+		stop(paste("give a number nbasis smaller than ",nbasismax, " for avoiding ill-conditioned matrix"))
+	}
+	a <- Range.grid[1]
+	b <- Range.grid[2]
+	x <- seq(a, b, length = p)
+        if(is.null(period)) period <- b - a
+	FOURIER <- fourier(x, nbasis, period)
+	CMAT <- crossprod(FOURIER)
+	DMAT <- crossprod(FOURIER, t(DATA))
+	COEF <- symsolve(CMAT, DMAT)
+	list(COEF = COEF, APPROX = FOURIER %*% COEF)
+}

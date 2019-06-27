@@ -1,0 +1,96 @@
+nke <- function(Responses, CONTAMINATED_CURVES, semimetric = "deriv", nbbwsmooth = 10, bw.adjust = F, kfold = 5, method = "regression", ...)
+{
+#########################################################################
+# Estimate nonparametrically the relationship between responses and 
+# contaminated curves. 
+# Nested kernel estimators are implemented : one for the denoising step
+# and one for estimating the relationship. 
+# The estimating algorithm selects automatically two smoothing parameters 
+# (one for the denoising step and one for estimating the relationship) by 
+# minimizing a k-fold cross-validation (the original dataset is split into
+# "kfold" blocks or subsamples).
+# Remark: the measurements where the contaminated curves are observed must 
+#         be systematically the same (and equispaced) for the whole sample
+#    "Responses" vector containing responses corresponding to contaminated 
+#                curves
+#    "CONTAMINATED_CURVES" matrix containing the contaminated curves 
+#                          (stored row by row) used for the learning step
+#    "..." arguments needed for the call of the function computing 
+#          the semi-metric between curves
+#    "semimetric" character string allowing to choose the function 
+#                 computing the semimetric;  you can select 
+#                 "deriv" (default), "fourier", "hshift", "mplsr", 
+#                 and "pca"
+#    "nbbwsmooth" size of the bandwidths set used for selecting the optimal
+#                 for the denoising step (= 20 by default)
+#    "bw.adjust" logical value; if bw.adjust = T then the bandwidths used 
+#                in the denoising step are proportionnal to the standard 
+#                deviation derived from the predictors observed at the 
+#                measurement where the kernel smoother is computed (by 
+#                default bw.adjust = F)
+#    "kfold" integer giving the number of folds in the k-fold cross validation
+#    "method" character string equals to "regression" (default) or 
+#             "discrimination"
+# Returns outputs from the function "nested.funopare" if method = "regression"
+# (i.e. regression setting); in the other case (i.e. method = "discrimination")
+# outputs from the function "nested.funopadi" are given.
+################################################################
+	if(method == "regression"){
+		outputs = nested.funopare(Responses, CONTAMINATED_CURVES, semimetric, nbbwsmooth, bw.adjust, kfold, ...)
+	}else{
+		outputs = nested.funopadi(Responses, CONTAMINATED_CURVES, semimetric, nbbwsmooth, bw.adjust, kfold, ...)
+	}
+	return(outputs)
+}
+#####################################################################
+#####################################################################
+############### LOCAL LINEAR MULTIVARIATE PREDICTION ################
+############### USING AN OBJECT OF CLASS "mpdp"      ################
+#####################################################################
+#####################################################################
+predict.mpdp <- function(object, CURVPRED)
+{
+      if(is.vector(CURVPRED)) CURVPRED <- as.matrix(CURVPRED) 
+      VECEST <- object$predictors[,object$Bwdselection]
+      VECPRED <- CURVPRED[,object$Bwdselection]
+      Meancurve <- apply(VECEST,2,mean)
+      CCOVARIATES <- t(t(VECEST)-Meancurve)
+      Stdev <- sqrt(apply(CCOVARIATES^2,2,mean))
+      COVARIATE <- t(t(CCOVARIATES)/Stdev)
+      CVECPRED <- t(t(VECPRED)-Meancurve)
+      PRED <- t(t(CVECPRED)/Stdev)
+      nind <- nrow(COVARIATE)
+      kernel <- get(object$kind.of.kernel)
+      nind2 <- nrow(PRED)
+      Ind1 <- rep(1:nind2,nind)
+      Ind2 <- rep(1:nind,rep(nind2,nind))
+      COVAR.REP.ROW <- COVARIATE[Ind2,]
+      PRED.ALT.ROW <- PRED[Ind1,]
+      D2 <- (PRED.ALT.ROW-COVAR.REP.ROW)^2
+      D2OVERBW <- D2/(object$bandwidth^2)
+      Dist <- sqrt(apply(D2OVERBW,1,sum))
+      Ker <- rep(0,nind2*nind)
+      Ker[Dist>0] <- kernel(Dist[Dist>0])
+      KERNEL <- matrix(Ker, nrow=nind2)
+      Denom <- apply(KERNEL,1,sum)
+      NUM <- KERNEL %*% COVARIATE
+      XBAR <- NUM/Denom
+      Ynum <- as.vector(KERNEL %*% object$responses) 
+      Ybar <- Ynum/Denom
+      TP1 <- crossprod(t(KERNEL)*object$responses,COVARIATE)
+      TP2 <- XBAR*Ynum
+      TP1M2 <- TP1-TP2
+      Predictions <- 0
+      for(ii in 1:nind2){
+             CCOVAR <- t(t(COVARIATE)-XBAR[ii,])
+             TP3 <- crossprod(CCOVAR,(CCOVAR*KERNEL[ii,]))
+             if(abs(det(TP3))<1e-8){
+                   Predictions[ii] <- Ybar[ii]
+             }else{
+                   Bb <- solve(TP3,TP1M2[ii,])
+                   Cpred <- t(t(PRED)-XBAR[ii,])
+                   Predictions[ii] <- Ybar[ii]+crossprod(Bb,Cpred[ii,]) 
+             } 
+      }
+      return(Predictions) 
+}    

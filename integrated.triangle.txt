@@ -1,0 +1,14 @@
+integrated.triangle <- function(u)
+{
+#  integrated triangle kernel
+        result <- u
+        Logic0 <- (u <= -1 | u >= 1)
+        Logic1 <- (u > -1 & u < 0)
+        Logic2 <- (u >=0 & u < 1)
+        Uneg <- u[Logic1]
+        Upos <- u[Logic2]
+        result[Logic1] <-  Uneg + (Uneg^2)/2 + 0.5
+        result[Logic2] <-  Upos - (Upos^2)/2 + 0.5
+        result[Logic0] <- 0
+	return(result)
+}
